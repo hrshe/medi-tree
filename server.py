@@ -29,6 +29,8 @@ from urllib.parse import parse_qs
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
 from sample_tree import SAMPLE_TREE
+from tree_validation import publication_errors
+from math import isfinite
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -143,6 +145,9 @@ def validate_tree_payload(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
         except (TypeError, ValueError):
             pos_x, pos_y = 0.0, 0.0
 
+        if not isfinite(pos_x) or not isfinite(pos_y):
+            errors.append(f"Node {node_id}: coordinates must be finite.")
+            continue
         nodes.append(
             {
                 "id": node_id,
@@ -181,7 +186,7 @@ def validate_tree_payload(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
             errors.append(f"Edge '{edge_id}' cannot connect a node to itself.")
             continue
 
-        label = str(raw_edge.get("label", "")).strip() or "Next"
+        label = str(raw_edge.get("label", "")).strip()
         try:
             order = int(raw_edge.get("order", idx + 1))
         except (TypeError, ValueError):
@@ -325,9 +330,11 @@ class Database:
 
     def _seed_defaults(self, conn: sqlite3.Connection) -> None:
         admin_count = conn.execute("SELECT COUNT(*) FROM admins").fetchone()[0]
-        if admin_count == 0:
+        if admin_count == 0 and os.environ.get("MEDINETZ_ADMIN_PASSWORD"):
+            if len(os.environ["MEDINETZ_ADMIN_PASSWORD"]) < 12:
+                raise ValueError("Initial admin password must have at least 12 characters.")
             default_user = os.environ.get("MEDINETZ_ADMIN_USER", "admin").strip() or "admin"
-            default_pass = os.environ.get("MEDINETZ_ADMIN_PASSWORD", "medinetz-admin")
+            default_pass = os.environ["MEDINETZ_ADMIN_PASSWORD"]
             conn.execute(
                 "INSERT INTO admins (username, password_hash, created_at) VALUES (?, ?, ?)",
                 (default_user, hash_password(default_pass), utc_now_iso()),
@@ -394,8 +401,8 @@ class Database:
             conn.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),))
 
     def change_password(self, admin_id: int, current_password: str, new_password: str) -> tuple[bool, str]:
-        if len(new_password) < 8:
-            return False, "New password must be at least 8 characters long."
+        if len(new_password) < 12:
+            return False, "New password must be at least 12 characters long."
         with DB_LOCK, get_connection(self.db_path) as conn:
             row = conn.execute("SELECT password_hash FROM admins WHERE id = ?", (admin_id,)).fetchone()
             if not row or not verify_password(current_password, row["password_hash"]):
@@ -404,12 +411,16 @@ class Database:
                 "UPDATE admins SET password_hash = ? WHERE id = ?",
                 (hash_password(new_password), admin_id),
             )
-            return True, "Password updated."
+            conn.execute("DELETE FROM sessions WHERE admin_id = ?", (admin_id,))
+            return True, "Password updated. Sign in again."
 
     def upsert_admin(self, username: str, password: str) -> None:
+        if not username.strip() or len(password) < 12:
+            raise ValueError("Username and password of at least 12 characters required.")
         with DB_LOCK, get_connection(self.db_path) as conn:
             existing = conn.execute("SELECT id FROM admins WHERE username = ?", (username,)).fetchone()
             if existing:
+                conn.execute("DELETE FROM sessions WHERE admin_id = ?", (existing["id"],))
                 conn.execute(
                     "UPDATE admins SET password_hash = ? WHERE id = ?",
                     (hash_password(password), existing["id"]),
@@ -452,6 +463,10 @@ class Database:
             }
 
     def save_tree(self, tree: dict[str, Any], username: str, publish: bool = False) -> dict[str, Any]:
+        if publish:
+            errors = publication_errors(tree)
+            if errors:
+                raise PublicationError(errors)
         serialized = json.dumps(tree)
         now = utc_now_iso()
         with DB_LOCK, get_connection(self.db_path) as conn:
@@ -487,6 +502,9 @@ class Database:
             row = conn.execute(
                 "SELECT draft_json, published_version FROM trees WHERE slug = 'default'"
             ).fetchone()
+            errors = publication_errors(json.loads(row["draft_json"]))
+            if errors:
+                raise PublicationError(errors)
             next_pub_version = int(row["published_version"]) + 1
             conn.execute(
                 """
@@ -507,6 +525,10 @@ def _status_line(code: int) -> str:
     return f"{code} {phrase}"
 
 
+class PublicationError(ValueError):
+    pass
+
+
 class MedinetzApp:
     """Framework-free WSGI application compatible with PythonAnywhere and standalone servers."""
 
@@ -518,7 +540,11 @@ class MedinetzApp:
         path = environ.get("PATH_INFO", "/") or "/"
         query_string = environ.get("QUERY_STRING", "")
 
-        status_code, headers, body = self._dispatch(method, path, query_string, environ)
+        try:
+            status_code, headers, body = self._dispatch(method, path, query_string, environ)
+        except PublicationError as exc:
+            status_code, headers, body = self._json_response(400, {"error": "Publication validation failed.", "details": exc.args[0]})
+        headers.extend([("X-Content-Type-Options", "nosniff"), ("X-Frame-Options", "DENY"), ("Referrer-Policy", "no-referrer")])
         start_response(_status_line(status_code), headers)
         return [body]
 
@@ -556,7 +582,7 @@ class MedinetzApp:
         if not file_path.exists() or not file_path.is_file():
             return self._json_response(404, {"error": "Not found"})
         resolved = file_path.resolve()
-        if not str(resolved).startswith(str(STATIC_DIR.resolve())):
+        if not resolved.is_relative_to(STATIC_DIR.resolve()):
             return self._json_response(403, {"error": "Forbidden"})
         mime_type, _ = mimetypes.guess_type(str(resolved))
         if resolved.suffix == ".js":
@@ -632,7 +658,7 @@ class MedinetzApp:
             if path.startswith("/static/"):
                 return self._serve_file(STATIC_DIR / path[len("/static/"):])
             if path == "/api/health":
-                return self._json_response(200, {"status": "ok", "stateless": True})
+                return self._json_response(200, {"status": "ok"})
             if path == "/api/tree/published":
                 return self._json_response(200, self.db.get_published_tree())
             if path == "/api/admin/me":
@@ -681,6 +707,13 @@ class MedinetzApp:
                 return self._json_response(400, {"error": f"Unsupported export format '{fmt}'."})
             return self._json_response(404, {"error": "Endpoint not found."})
 
+        if method in ("POST", "PUT", "PATCH", "DELETE"):
+            origin = environ.get("HTTP_ORIGIN")
+            expected = os.environ.get("MEDINETZ_PUBLIC_ORIGIN") or (("https" if self._is_https(environ) else "http") + "://" + environ.get("HTTP_HOST", ""))
+            if environ.get("HTTP_SEC_FETCH_SITE") == "cross-site" or (origin and origin != expected):
+                return self._json_response(403, {"error": "Cross-origin request rejected."})
+            if path not in ("/api/admin/logout", "/api/admin/tree/publish") and environ.get("CONTENT_TYPE", "").split(";")[0].strip().lower() != "application/json":
+                return self._json_response(415, {"error": "JSON content type required."})
         if method == "POST":
             if path == "/api/admin/login":
                 body, err = self._read_json_body(environ)
@@ -717,7 +750,7 @@ class MedinetzApp:
                 )
                 if not ok:
                     return self._json_response(400, {"error": msg})
-                return self._json_response(200, {"message": msg})
+                return self._json_response(200, {"message": msg}, extra_headers=[self._cookie_header(environ, "", 0)])
             if path == "/api/admin/tree/publish":
                 admin = self.db.get_session_admin(self._get_session_token(environ))
                 if not admin:

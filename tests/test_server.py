@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 import urllib.error
 import urllib.request
 from wsgiref.util import setup_testing_defaults
@@ -24,7 +25,15 @@ class MedinetzServerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.tmpdir.name) / "test.db"
-        self.server = create_server(host="127.0.0.1", port=0, db_path=self.db_path)
+        with patch.dict("os.environ", {
+            "MEDINETZ_ADMIN_USER": "admin",
+            "MEDINETZ_ADMIN_PASSWORD": "test-admin-password-2026",
+        }):
+            self.server = create_server(
+                host="127.0.0.1",
+                port=0,
+                db_path=self.db_path,
+            )
         self.port = self.server.server_address[1]
         self.base_url = f"http://127.0.0.1:{self.port}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -100,7 +109,7 @@ class MedinetzServerTests(unittest.TestCase):
 
     def test_draft_publish_export_import_and_password_flow(self) -> None:
         # Login
-        status, raw, _ = self.request("POST", "/api/admin/login", {"username": "admin", "password": "medinetz-admin"})
+        status, raw, _ = self.request("POST", "/api/admin/login", {"username": "admin", "password": "test-admin-password-2026"})
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(raw)["authenticated"])
 
@@ -153,7 +162,7 @@ class MedinetzServerTests(unittest.TestCase):
         st, _, _ = self.request(
             "POST",
             "/api/admin/password",
-            {"currentPassword": "medinetz-admin", "newPassword": "new-secure-password"},
+            {"currentPassword": "test-admin-password-2026", "newPassword": "new-secure-password"},
         )
         self.assertEqual(st, 200)
 
@@ -200,7 +209,7 @@ class MedinetzServerTests(unittest.TestCase):
 
         body = b"".join(app(environ, start_response))
         self.assertTrue(captured["status"].startswith("200"))
-        self.assertEqual(json.loads(body.decode("utf-8")), {"status": "ok", "stateless": True})
+        self.assertEqual(json.loads(body.decode("utf-8")), {"status": "ok"})
 
 
 if __name__ == "__main__":
