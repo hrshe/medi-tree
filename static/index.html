@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Medinetz Decision Guide</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">
+            <span id="tree-title">Medinetz Decision Guide</span>
+            <span class="pill" id="tree-version">v1</span>
+          </div>
+          <div class="brand-subtitle" id="tree-description">Loading published guide...</div>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <span class="pill pill-privacy" title="This app runs completely statelessly. No client answers or case records are ever saved.">
+          <span class="pill-dot"></span>
+          <span class="privacy-label-full">Stateless · No Client Data Saved</span>
+          <span class="privacy-label-short">No Data Saved</span>
+        </span>
+
+        <div class="segmented" role="group" aria-label="View mode">
+          <button type="button" data-view="split" class="active">Both</button>
+          <button type="button" data-view="wizard">Steps</button>
+          <button type="button" data-view="map">Map</button>
+        </div>
+
+        <button type="button" class="btn btn-soft btn-sm" id="btn-restart" title="Clear current session and start over (R)">
+          New Case
+        </button>
+
+        <a href="/admin" class="btn btn-sm">Admin</a>
+      </div>
+    </header>
+
+    <main class="volunteer-main mode-split" id="volunteer-main">
+      <section class="wizard-pane" aria-label="Guided decision wizard">
+        <div class="wizard-header-bar">
+          <nav class="breadcrumb-trail" id="breadcrumbs" aria-label="Decision path"></nav>
+        </div>
+
+        <div id="step-container"></div>
+
+        <div class="privacy-footer-card">
+          <strong>Privacy Guarantee:</strong> Decisions stay strictly in your browser tab memory and disappear as soon as you click <em>Start New Case</em> or close the tab. Nothing is transmitted or saved.
+        </div>
+      </section>
+
+      <section class="map-pane" aria-label="Interactive decision flowchart">
+        <div class="canvas-legend">
+          <span><i class="legend-dot" style="background:#0d9488"></i>Path</span>
+          <span><i class="legend-dot" style="background:#dc2626"></i>Urgent</span>
+          <span><i class="legend-dot" style="background:#2563eb"></i>Referral</span>
+          <span><i class="legend-dot" style="background:#059669"></i>Action</span>
+          <span class="legend-hint-desktop" style="color:#64748b">· Click any node to jump</span>
+        </div>
+
+        <div class="graph-viewport" id="volunteer-graph"></div>
+
+        <div class="canvas-controls">
+          <button type="button" class="btn btn-icon btn-sm" id="btn-zoom-out" title="Zoom out">-</button>
+          <button type="button" class="btn btn-sm" id="btn-fit" title="Fit flowchart to screen">Fit</button>
+          <button type="button" class="btn btn-icon btn-sm" id="btn-zoom-in" title="Zoom in">+</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/static/volunteer.js"></script>
+</body>
+</html>

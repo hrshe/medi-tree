@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Medinetz Admin Studio</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="8.5" y="14" width="7" height="7" rx="1.5"/>
+            <path d="M6.5 10v2h11v-2M12 12v2"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">
+            <span>Medinetz Admin Studio</span>
+            <span class="pill hidden" id="publish-status-pill">Published</span>
+          </div>
+          <div class="brand-subtitle" id="admin-subtitle">Sign in to edit and publish the decision tree</div>
+        </div>
+      </div>
+
+      <div class="topbar-actions hidden" id="admin-toolbar">
+        <button type="button" class="btn btn-sm" id="btn-auto-layout" title="Arrange nodes cleanly">Auto Layout</button>
+
+        <div class="dropdown" id="export-dropdown">
+          <button type="button" class="btn btn-sm" id="btn-export-toggle">Export ▾</button>
+          <div class="dropdown-menu hidden" id="export-menu">
+            <button type="button" class="dropdown-item" data-export="json"><span>JSON Tree</span><small>.json</small></button>
+            <button type="button" class="dropdown-item" data-export="svg"><span>SVG Diagram</span><small>.svg</small></button>
+            <button type="button" class="dropdown-item" data-export="mermaid"><span>Mermaid Flowchart</span><small>.mmd</small></button>
+            <button type="button" class="dropdown-item" data-export="markdown"><span>Markdown Guide</span><small>.md</small></button>
+          </div>
+        </div>
+
+        <label class="btn btn-sm" style="cursor:pointer;" title="Import a JSON decision tree file">
+          Import JSON
+          <input type="file" id="input-import-json" accept="application/json,.json" class="hidden" />
+        </label>
+
+        <button type="button" class="btn btn-sm" id="btn-save-draft" title="Save draft without publishing (Ctrl+S)">Save Draft</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-publish">Publish Live</button>
+
+        <a href="/" target="_blank" rel="noopener" class="btn btn-soft btn-sm">Volunteer View ↗</a>
+        <button type="button" class="btn btn-sm" id="btn-account">Account</button>
+        <button type="button" class="btn btn-sm" id="btn-logout">Sign Out</button>
+      </div>
+
+      <div class="topbar-actions" id="login-topbar-actions">
+        <a href="/" class="btn btn-soft btn-sm">← Volunteer View</a>
+      </div>
+    </header>
+
+    <!-- Login View -->
+    <main class="login-screen" id="login-screen">
+      <form class="login-card" id="login-form">
+        <div>
+          <h1 style="margin:0 0 6px 0;font-size:20px;">Admin Sign In</h1>
+          <p style="margin:0;font-size:13px;color:var(--text-muted);line-height:1.5;">
+            Sign in to edit the Medinetz decision tree flowchart. Only flowchart logic is stored—never any client or patient data.
+          </p>
+        </div>
+
+        <div id="login-error" class="alert alert-error hidden"></div>
+
+        <div class="field" style="margin-bottom:0;">
+          <label for="login-username">Username</label>
+          <input class="input" id="login-username" name="username" autocomplete="username" required />
+        </div>
+
+        <div class="field" style="margin-bottom:0;">
+          <label for="login-password">Password</label>
+          <input class="input" id="login-password" name="password" type="password" autocomplete="current-password" required />
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">Sign In to Studio</button>
+
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.45;border-top:1px solid var(--border);padding-top:12px;">
+          Initial setup default: username <code>admin</code>, password <code>medinetz-admin</code> (change via Account settings or <code>--set-admin</code>).
+        </div>
+      </form>
+    </main>
+
+    <!-- Mobile Panel Switcher (Admin Studio) -->
+    <div class="mobile-admin-tabs hidden" id="mobile-admin-tabs" role="tablist" aria-label="Studio panels">
+      <button type="button" data-admin-tab="canvas" class="active">Canvas</button>
+      <button type="button" data-admin-tab="nodes">Nodes & Add</button>
+      <button type="button" data-admin-tab="inspector">Edit Panel</button>
+    </div>
+
+    <!-- Drag & Drop Studio Workspace -->
+    <main class="admin-workspace mobile-tab-canvas hidden" id="admin-workspace">
+      <!-- Left Palette & Outline -->
+      <aside class="admin-sidebar">
+        <div>
+          <h2 class="panel-section-title">Drag onto Canvas</h2>
+          <div class="palette-item" draggable="true" data-create-node="question" id="palette-question">
+            <span class="legend-dot" style="background:#0d9488;width:12px;height:12px;flex-shrink:0;"></span>
+            <div>
+              <strong>Question Node</strong>
+              <span>Decision step with answer branches</span>
+            </div>
+          </div>
+          <div class="palette-item" draggable="true" data-create-node="outcome" id="palette-outcome">
+            <span class="legend-dot" style="background:#059669;width:12px;height:12px;flex-shrink:0;"></span>
+            <div>
+              <strong>Outcome Node</strong>
+              <span>Final guidance & action checklist</span>
+            </div>
+          </div>
+          <p style="margin:4px 0 0 0;font-size:11.5px;color:var(--text-muted);line-height:1.4;">
+            Tip: Drag a card onto the canvas, or click to add. Drag from a node's bottom <strong>+</strong> port to another node to connect branches.
+          </p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;min-height:0;flex:1;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <h2 class="panel-section-title" style="margin:0;">Nodes (<span id="node-count">0</span>)</h2>
+          </div>
+          <input class="input" id="node-search" placeholder="Filter nodes..." style="margin-bottom:8px;padding:6px 9px;font-size:12px;" />
+          <div class="node-outline-list" id="node-outline"></div>
+        </div>
+      </aside>
+
+      <!-- Center Drag & Drop Canvas -->
+      <section class="map-pane" aria-label="Flowchart editor canvas">
+        <div class="canvas-legend">
+          <span>Drag nodes to move</span>
+          <span>·</span>
+          <span>Drag <strong>+</strong> port to link</span>
+          <span>·</span>
+          <span>Scroll to zoom</span>
+        </div>
+
+        <div class="graph-viewport" id="admin-graph"></div>
+
+        <div class="canvas-controls">
+          <button type="button" class="btn btn-icon btn-sm" id="btn-zoom-out" title="Zoom out">-</button>
+          <button type="button" class="btn btn-sm" id="btn-fit" title="Fit flowchart to screen">Fit</button>
+          <button type="button" class="btn btn-icon btn-sm" id="btn-zoom-in" title="Zoom in">+</button>
+        </div>
+      </section>
+
+      <!-- Right Properties Inspector -->
+      <aside class="admin-inspector" id="inspector-panel"></aside>
+    </main>
+  </div>
+
+  <!-- Password / Account Modal -->
+  <div class="modal-backdrop hidden" id="account-modal">
+    <form class="modal-card" id="password-form">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h2 style="margin:0;font-size:17px;">Admin Account</h2>
+        <button type="button" class="btn btn-sm" id="btn-close-account">Close</button>
+      </div>
+      <p style="margin:0 0 14px 0;font-size:13px;color:var(--text-muted);">
+        Signed in as <strong id="account-username">admin</strong>. Update your password below.
+      </p>
+      <div id="password-feedback" class="alert hidden" style="margin-bottom:12px;"></div>
+      <div class="field">
+        <label for="curr-pass">Current Password</label>
+        <input class="input" id="curr-pass" type="password" required />
+      </div>
+      <div class="field">
+        <label for="new-pass">New Password (min 8 chars)</label>
+        <input class="input" id="new-pass" type="password" minlength="8" required />
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button type="submit" class="btn btn-primary">Update Password</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script type="module" src="/static/admin.js"></script>
+</body>
+</html>
