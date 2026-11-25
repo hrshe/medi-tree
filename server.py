@@ -800,9 +800,17 @@ class ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
 
 
 class QuietWSGIHandler(WSGIRequestHandler):
-    def log_message(self, format: str, *args: Any) -> None:
-        sys.stderr.write(f"[http] {self.command} {self.path.split('?', 1)[0]} -> {args[1] if len(args) > 1 else ''}\n")
 
+    def log_message(self, format: str, *args: Any) -> None:
+        command = getattr(self, "command", "-")
+        path = getattr(self, "path", "-")
+        sys.stderr.write(
+            f"[http] {command} {path.split('?', 1)[0]} -> "
+            f"{args[1] if len(args) > 1 else ''}\n"
+        )
+
+    def log_error(self, format: str, *args: Any) -> None:
+        sys.stderr.write(f"[http-error] {format % args}\n")
 
 def create_server(host: str = "127.0.0.1", port: int = 8080, db_path: Path = DB_PATH) -> ThreadingWSGIServer:
     app = create_app(db_path=db_path)
